@@ -33,6 +33,24 @@ fn compute_search_highlight(
     }
 }
 
+/// Pure helper: given the current scroll `offset`, the `selected` row and the
+/// visible `height`, return an offset that keeps `selected` within the viewport
+/// while moving as little as possible. Shared by both scrollable panes so the
+/// "keep selection visible" rule lives in exactly one place.
+fn keep_selection_visible(offset: usize, selected: usize, height: usize) -> usize {
+    if height == 0 {
+        return offset;
+    }
+    if selected < offset {
+        selected
+    } else if selected >= offset + height {
+        // selected + 1 - height; selected >= height here so no underflow.
+        selected + 1 - height
+    } else {
+        offset
+    }
+}
+
 /// Pure helper: branch indices whose (lowercased) name contains the query.
 /// Mirrors the filtering used by interactive search so it can be unit-tested
 /// without constructing a full [`App`].
@@ -159,12 +177,12 @@ impl App {
 
     /// Compute which commits belong to the selected branch (ancestry)
     fn select_branch(&mut self, idx: usize) {
-        if self.repo_data.branches.is_empty() {
+        // Defensive `.get()` rather than `branches[idx]`: a stale index after a
+        // reload that shrinks the branch list must clear the selection, not panic.
+        let Some(branch) = self.repo_data.branches.get(idx) else {
             self.active_branch_oids.clear();
             return;
-        }
-
-        let branch = &self.repo_data.branches[idx];
+        };
         let tip = branch.tip_oid;
 
         // Walk topo_order keeping only ancestors of tip
@@ -413,26 +431,14 @@ impl App {
 
     /// Ensure branch_offset keeps the selection visible given a viewport height
     pub fn scroll_branch_list(&mut self, viewport_height: usize) {
-        if viewport_height == 0 {
-            return;
-        }
-        if self.branch_selected < self.branch_offset {
-            self.branch_offset = self.branch_selected;
-        } else if self.branch_selected >= self.branch_offset + viewport_height {
-            self.branch_offset = self.branch_selected + 1 - viewport_height;
-        }
+        self.branch_offset =
+            keep_selection_visible(self.branch_offset, self.branch_selected, viewport_height);
     }
 
     /// Ensure graph_offset keeps the selection visible
     pub fn scroll_graph(&mut self, viewport_height: usize) {
-        if viewport_height == 0 {
-            return;
-        }
-        if self.graph_selected < self.graph_offset {
-            self.graph_offset = self.graph_selected;
-        } else if self.graph_selected >= self.graph_offset + viewport_height {
-            self.graph_offset = self.graph_selected + 1 - viewport_height;
-        }
+        self.graph_offset =
+            keep_selection_visible(self.graph_offset, self.graph_selected, viewport_height);
     }
 }
 
@@ -490,6 +496,26 @@ mod tests {
         );
         // a non-matching branch gets nothing
         assert_eq!(compute_search_highlight(3, "x", &matches, 1), None);
+    }
+
+    #[test]
+    fn keep_visible_scrolls_to_follow_selection() {
+        // Already in view: offset unchanged.
+        assert_eq!(keep_selection_visible(0, 3, 10), 0);
+        // Selection above the window: snap offset up to it.
+        assert_eq!(keep_selection_visible(5, 2, 10), 2);
+        // Selection below the window: scroll just enough to reveal it.
+        assert_eq!(keep_selection_visible(0, 12, 10), 3);
+        // Exactly at the bottom edge stays put.
+        assert_eq!(keep_selection_visible(0, 9, 10), 0);
+        // First row past the bottom edge scrolls by one.
+        assert_eq!(keep_selection_visible(0, 10, 10), 1);
+    }
+
+    #[test]
+    fn keep_visible_zero_height_is_noop() {
+        // A collapsed pane must not panic or move the offset.
+        assert_eq!(keep_selection_visible(7, 3, 0), 7);
     }
 
     #[test]
