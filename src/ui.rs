@@ -594,3 +594,24 @@ fn truncate_path(path: &str, max: usize) -> String {
         truncate_str(path, max)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn truncate_str_handles_fit_overflow_and_zero() {
+        assert_eq!(truncate_str("hello", 5), "hello");
+        assert_eq!(truncate_str("hello!", 5), "hell…");
+        assert_eq!(truncate_str("anything", 0), "");
+        // Counts chars, not bytes — must not split multibyte glyphs
+        assert_eq!(truncate_str("héllo", 3), "hé…");
+    }
+
+    #[test]
+    fn truncate_path_shortens_to_last_component() {
+        assert_eq!(truncate_path("short", 10), "short");
+        assert_eq!(truncate_path("aaaa/bbbb/cc", 8), "…/cc");
+        assert_eq!(truncate_path("C:\\Users\\someone\\repo", 12), "…/repo");
+    }
+}

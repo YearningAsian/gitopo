@@ -268,3 +268,77 @@ pub fn format_relative_time_with_now(seconds: i64, now: i64) -> String {
 pub fn format_relative_time(seconds: i64) -> String {
     format_relative_time_with_now(seconds, chrono::Utc::now().timestamp())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn relative_time_boundaries() {
+        // Commit timestamp in the future (clock skew) must not underflow
+        assert_eq!(format_relative_time_with_now(100, 50), "just now");
+        assert_eq!(format_relative_time_with_now(100, 100), "0s ago");
+        assert_eq!(format_relative_time_with_now(0, 59), "59s ago");
+        assert_eq!(format_relative_time_with_now(0, 60), "1m ago");
+        assert_eq!(format_relative_time_with_now(0, 3_599), "59m ago");
+        assert_eq!(format_relative_time_with_now(0, 3_600), "1h ago");
+        assert_eq!(format_relative_time_with_now(0, 86_399), "23h ago");
+        assert_eq!(format_relative_time_with_now(0, 86_400), "1d ago");
+        assert_eq!(format_relative_time_with_now(0, 2_591_999), "29d ago");
+        assert_eq!(format_relative_time_with_now(0, 2_592_000), "1mo ago");
+        assert_eq!(format_relative_time_with_now(0, 31_536_000), "1y ago");
+    }
+
+    #[test]
+    fn load_repo_reads_branches_and_commits() {
+        let dir = std::env::temp_dir().join(format!(
+            "gitopo-test-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        {
+            let repo = Repository::init(&dir).unwrap();
+            let sig = git2::Signature::now("Test", "test@example.com").unwrap();
+            let tree_id = {
+                let mut index = repo.index().unwrap();
+                index.write_tree().unwrap()
+            };
+            let tree = repo.find_tree(tree_id).unwrap();
+            let first = repo
+                .commit(Some("HEAD"), &sig, &sig, "first", &tree, &[])
+                .unwrap();
+            let parent = repo.find_commit(first).unwrap();
+            repo.commit(Some("HEAD"), &sig, &sig, "second", &tree, &[&parent])
+                .unwrap();
+        }
+
+        let data = load_repo(&dir, false, 100).unwrap();
+        assert_eq!(data.branches.len(), 1);
+        assert!(data.branches[0].is_head);
+        assert!(!data.branches[0].is_remote);
+        assert_eq!(data.topo_order.len(), 2);
+        assert_eq!(data.commits.len(), 2);
+        // Newest first in topological order
+        assert_eq!(data.commits[&data.topo_order[0]].message, "second");
+        assert_eq!(data.commits[&data.topo_order[1]].message, "first");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn load_repo_errors_on_non_repo() {
+        let dir = std::env::temp_dir().join(format!(
+            "gitopo-nonrepo-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // Must return an error, not panic
+        assert!(load_repo(&dir, false, 100).is_err());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

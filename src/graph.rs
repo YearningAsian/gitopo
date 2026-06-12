@@ -212,3 +212,95 @@ pub fn render_connector_prefix(row: &GraphRow) -> String {
 
     s
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn oid(n: u8) -> Oid {
+        Oid::from_str(&format!("{:040x}", n)).unwrap()
+    }
+
+    fn commit(o: Oid, parents: Vec<Oid>) -> CommitInfo {
+        CommitInfo {
+            oid: o,
+            short_id: String::new(),
+            message: String::new(),
+            author: String::new(),
+            time: 0,
+            parent_oids: parents,
+        }
+    }
+
+    fn graph_for(chain: Vec<CommitInfo>) -> Vec<GraphRow> {
+        let topo: Vec<Oid> = chain.iter().map(|c| c.oid).collect();
+        let commits: HashMap<Oid, CommitInfo> = chain.into_iter().map(|c| (c.oid, c)).collect();
+        build_graph(&topo, &commits, &HashMap::new())
+    }
+
+    #[test]
+    fn empty_history_yields_no_rows() {
+        assert!(graph_for(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn linear_history_stays_in_one_lane() {
+        let rows = graph_for(vec![
+            commit(oid(3), vec![oid(2)]),
+            commit(oid(2), vec![oid(1)]),
+            commit(oid(1), vec![]),
+        ]);
+        assert_eq!(rows.len(), 3);
+        for row in &rows {
+            assert_eq!(row.col, 0);
+            assert_eq!(row.num_cols, 1);
+        }
+    }
+
+    #[test]
+    fn merge_opens_a_second_lane() {
+        // M merges B and C; both descend from root R
+        let rows = graph_for(vec![
+            commit(oid(4), vec![oid(3), oid(2)]), // M
+            commit(oid(3), vec![oid(1)]),         // B
+            commit(oid(2), vec![oid(1)]),         // C
+            commit(oid(1), vec![]),               // R
+        ]);
+        assert_eq!(rows.len(), 4);
+        assert_eq!(rows[0].col, 0); // M
+        assert_eq!(rows[1].col, 0); // B continues M's lane
+        assert_eq!(rows[2].col, 1); // C sits in the merge lane
+        assert_eq!(rows[3].col, 0); // R collapses back to lane 0
+    }
+
+    #[test]
+    fn converging_lanes_collapse_at_shared_ancestor() {
+        // Regression: B and C both point at R; once R is emitted the duplicate
+        // lane must be cleared instead of drawing phantom lines forever.
+        let rows = graph_for(vec![
+            commit(oid(4), vec![oid(3), oid(2)]), // M
+            commit(oid(3), vec![oid(1)]),         // B -> R
+            commit(oid(2), vec![oid(1)]),         // C -> R
+            commit(oid(1), vec![]),               // R
+        ]);
+        let root_row = &rows[3];
+        assert_eq!(root_row.num_cols, 1, "stale duplicate lane survived");
+        assert!(root_row
+            .connectors
+            .iter()
+            .skip(1)
+            .all(|c| *c == Connector::Empty));
+    }
+
+    #[test]
+    fn render_prefix_marks_commit_and_connectors() {
+        let row = GraphRow {
+            oid: oid(1),
+            col: 0,
+            num_cols: 2,
+            connectors: vec![Connector::Vertical, Connector::Vertical],
+            branch_labels: Vec::new(),
+        };
+        assert_eq!(render_graph_prefix(&row), "● │ ");
+    }
+}

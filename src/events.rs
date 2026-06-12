@@ -85,3 +85,51 @@ pub fn key_to_action(key: KeyEvent) -> Option<Action> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    #[test]
+    fn quit_bindings() {
+        assert_eq!(key_to_action(key(KeyCode::Char('q'))), Some(Action::Quit));
+        assert_eq!(
+            key_to_action(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            Some(Action::Quit)
+        );
+    }
+
+    #[test]
+    fn navigation_bindings() {
+        assert_eq!(
+            key_to_action(key(KeyCode::Char('j'))),
+            Some(Action::MoveDown)
+        );
+        assert_eq!(key_to_action(key(KeyCode::Up)), Some(Action::MoveUp));
+        assert_eq!(key_to_action(key(KeyCode::Char('g'))), Some(Action::Top));
+        assert_eq!(
+            key_to_action(KeyEvent::new(KeyCode::Char('G'), KeyModifiers::SHIFT)),
+            Some(Action::Bottom)
+        );
+        assert_eq!(
+            key_to_action(KeyEvent::new(KeyCode::Char('f'), KeyModifiers::CONTROL)),
+            Some(Action::PageDown)
+        );
+    }
+
+    #[test]
+    fn mode_bindings() {
+        assert_eq!(key_to_action(key(KeyCode::Char('/'))), Some(Action::Search));
+        assert_eq!(
+            key_to_action(key(KeyCode::Char('a'))),
+            Some(Action::ToggleAll)
+        );
+        assert_eq!(key_to_action(key(KeyCode::Char('?'))), Some(Action::Help));
+        assert_eq!(key_to_action(key(KeyCode::Esc)), Some(Action::Escape));
+        assert_eq!(key_to_action(key(KeyCode::F(5))), None);
+    }
+}
