@@ -63,10 +63,14 @@ pub fn key_to_action(key: KeyEvent) -> Option<Action> {
         (KeyCode::Up, _) | (KeyCode::Char('k'), _) => Some(Action::MoveUp),
         (KeyCode::Down, _) | (KeyCode::Char('j'), _) => Some(Action::MoveDown),
         (KeyCode::PageUp, _) | (KeyCode::Char('b'), KeyModifiers::CONTROL) => Some(Action::PageUp),
-        (KeyCode::PageDown, _) | (KeyCode::Char('f'), KeyModifiers::CONTROL) => Some(Action::PageDown),
+        (KeyCode::PageDown, _) | (KeyCode::Char('f'), KeyModifiers::CONTROL) => {
+            Some(Action::PageDown)
+        }
         (KeyCode::Home, _) | (KeyCode::Char('g'), _) => Some(Action::Top),
         (KeyCode::End, _) | (KeyCode::Char('G'), _) => Some(Action::Bottom),
-        (KeyCode::Enter, _) | (KeyCode::Char('l'), _) | (KeyCode::Right, _) => Some(Action::SelectBranch),
+        (KeyCode::Enter, _) | (KeyCode::Char('l'), _) | (KeyCode::Right, _) => {
+            Some(Action::SelectBranch)
+        }
         (KeyCode::Char('a'), _) => Some(Action::ToggleAll),
         (KeyCode::Char('/'), _) => Some(Action::Search),
         (KeyCode::Char('n'), _) => Some(Action::SearchNext),

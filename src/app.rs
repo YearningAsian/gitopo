@@ -79,14 +79,15 @@ impl App {
     }
 
     pub fn reload(&mut self) -> Result<()> {
-        self.repo_data =
-            git::load_repo(&self.repo_path, self.show_all, self.max_commits)?;
+        self.repo_data = git::load_repo(&self.repo_path, self.show_all, self.max_commits)?;
         self.graph_rows = build_graph(
             &self.repo_data.topo_order,
             &self.repo_data.commits,
             &self.repo_data.oid_to_branches,
         );
-        let prev = self.branch_selected.min(self.repo_data.branches.len().saturating_sub(1));
+        let prev = self
+            .branch_selected
+            .min(self.repo_data.branches.len().saturating_sub(1));
         self.branch_selected = prev;
         self.branch_offset = self.branch_offset.min(self.branch_selected);
         self.select_branch(self.branch_selected);
@@ -149,11 +150,7 @@ impl App {
     #[allow(dead_code)]
     pub fn visible_branches(&self) -> Vec<(usize, &BranchInfo)> {
         if self.search_query.is_empty() || !self.search_mode && self.search_matches.is_empty() {
-            self.repo_data
-                .branches
-                .iter()
-                .enumerate()
-                .collect()
+            self.repo_data.branches.iter().enumerate().collect()
         } else {
             self.search_matches
                 .iter()
@@ -175,7 +172,10 @@ impl App {
 
                 if let Some(action) = key_to_action(key) {
                     if self.focus == Focus::Help {
-                        if action == Action::Escape || action == Action::Help || action == Action::Quit {
+                        if action == Action::Escape
+                            || action == Action::Help
+                            || action == Action::Quit
+                        {
                             self.focus = Focus::BranchList;
                         }
                         return Ok(false);

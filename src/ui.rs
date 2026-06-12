@@ -100,7 +100,12 @@ fn render_branch_list(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
-        .title(Span::styled(title, Style::default().fg(COLOR_TITLE).add_modifier(Modifier::BOLD)));
+        .title(Span::styled(
+            title,
+            Style::default()
+                .fg(COLOR_TITLE)
+                .add_modifier(Modifier::BOLD),
+        ));
 
     let visible_start = app.branch_offset;
     let visible_end = (visible_start + inner_height).min(branch_count);
@@ -156,7 +161,16 @@ fn build_branch_list_item<'a>(
 
     let mut spans = vec![
         Span::styled(prefix, Style::default().fg(name_color)),
-        Span::styled(display_name.clone(), Style::default().fg(name_color).add_modifier(if branch.is_head { Modifier::BOLD } else { Modifier::empty() })),
+        Span::styled(
+            display_name.clone(),
+            Style::default()
+                .fg(name_color)
+                .add_modifier(if branch.is_head {
+                    Modifier::BOLD
+                } else {
+                    Modifier::empty()
+                }),
+        ),
     ];
 
     // Ahead/behind indicator
@@ -164,19 +178,22 @@ fn build_branch_list_item<'a>(
         if ahead > 0 || behind > 0 {
             spans.push(Span::raw(" "));
             if ahead > 0 {
-                spans.push(Span::styled(format!("↑{}", ahead), Style::default().fg(COLOR_AHEAD)));
+                spans.push(Span::styled(
+                    format!("↑{}", ahead),
+                    Style::default().fg(COLOR_AHEAD),
+                ));
             }
             if behind > 0 {
-                spans.push(Span::styled(format!("↓{}", behind), Style::default().fg(COLOR_BEHIND)));
+                spans.push(Span::styled(
+                    format!("↓{}", behind),
+                    Style::default().fg(COLOR_BEHIND),
+                ));
             }
         }
     }
 
     // Right-align timestamp
-    let time_span = Span::styled(
-        format!(" {}", time_str),
-        Style::default().fg(COLOR_DIM),
-    );
+    let time_span = Span::styled(format!(" {}", time_str), Style::default().fg(COLOR_DIM));
     spans.push(time_span);
 
     let style = if is_selected {
@@ -209,7 +226,12 @@ fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
-        .title(Span::styled(title, Style::default().fg(COLOR_TITLE).add_modifier(Modifier::BOLD)));
+        .title(Span::styled(
+            title,
+            Style::default()
+                .fg(COLOR_TITLE)
+                .add_modifier(Modifier::BOLD),
+        ));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -224,11 +246,8 @@ fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
         .collect();
 
     // Build graph lookup
-    let graph_map: std::collections::HashMap<git2::Oid, &crate::graph::GraphRow> = app
-        .graph_rows
-        .iter()
-        .map(|r| (r.oid, r))
-        .collect();
+    let graph_map: std::collections::HashMap<git2::Oid, &crate::graph::GraphRow> =
+        app.graph_rows.iter().map(|r| (r.oid, r)).collect();
 
     let mut y = inner.y;
     for (local_idx, oid) in visible_oids.iter().enumerate() {
@@ -309,7 +328,10 @@ fn render_commit_row(
         for label in labels.iter().take(2) {
             spans.push(Span::styled(
                 format!("[{}] ", label),
-                Style::default().fg(COLOR_TAG).add_modifier(Modifier::BOLD).patch(bg),
+                Style::default()
+                    .fg(COLOR_TAG)
+                    .add_modifier(Modifier::BOLD)
+                    .patch(bg),
             ));
         }
     }
@@ -340,7 +362,10 @@ fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(border_color))
-        .title(Span::styled(" Commit Details ", Style::default().fg(COLOR_TITLE)));
+        .title(Span::styled(
+            " Commit Details ",
+            Style::default().fg(COLOR_TITLE),
+        ));
 
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -356,7 +381,10 @@ fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
 
     lines.push(Line::from(vec![
         Span::styled("commit  ", Style::default().fg(COLOR_DIM)),
-        Span::styled(format!("{}", oid), Style::default().fg(Color::Rgb(255, 200, 100))),
+        Span::styled(
+            format!("{}", oid),
+            Style::default().fg(Color::Rgb(255, 200, 100)),
+        ),
     ]));
 
     lines.push(Line::from(vec![
@@ -387,7 +415,9 @@ fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
     lines.push(Line::from(""));
     lines.push(Line::from(Span::styled(
         commit.message.clone(),
-        Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+        Style::default()
+            .fg(Color::White)
+            .add_modifier(Modifier::BOLD),
     )));
 
     // Show branch labels if any
@@ -405,8 +435,7 @@ fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
         lines.push(Line::from(label_spans));
     }
 
-    let paragraph = Paragraph::new(lines)
-        .wrap(Wrap { trim: true });
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: true });
     frame.render_widget(paragraph, inner);
 }
 
@@ -425,11 +454,7 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
         )
     };
 
-    let para = Paragraph::new(msg).style(
-        Style::default()
-            .fg(COLOR_DIM)
-            .bg(Color::Rgb(20, 22, 30)),
-    );
+    let para = Paragraph::new(msg).style(Style::default().fg(COLOR_DIM).bg(Color::Rgb(20, 22, 30)));
     frame.render_widget(para, area);
 }
 

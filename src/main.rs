@@ -1,8 +1,8 @@
 mod app;
-mod git;
-mod ui;
 mod events;
+mod git;
 mod graph;
+mod ui;
 
 use anyhow::Result;
 use clap::Parser;

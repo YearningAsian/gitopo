@@ -56,10 +56,7 @@ pub fn build_graph(
         // Find or assign a lane for this commit
         let col = find_or_assign_lane(&mut lanes, oid);
 
-        let branch_labels = oid_to_branches
-            .get(&oid)
-            .cloned()
-            .unwrap_or_default();
+        let branch_labels = oid_to_branches.get(&oid).cloned().unwrap_or_default();
 
         let num_cols = lanes.iter().filter(|l| l.is_some()).count().max(col + 1);
 
@@ -100,7 +97,11 @@ fn find_or_assign_lane(lanes: &mut Vec<Option<Oid>>, oid: Oid) -> usize {
     lanes.len() - 1
 }
 
-fn build_connectors(lanes: &[Option<Oid>], commit_col: usize, commit: &CommitInfo) -> Vec<Connector> {
+fn build_connectors(
+    lanes: &[Option<Oid>],
+    commit_col: usize,
+    commit: &CommitInfo,
+) -> Vec<Connector> {
     let width = lanes.len().max(commit_col + 1);
     let mut connectors = vec![Connector::Empty; width];
 
@@ -135,7 +136,7 @@ fn update_lanes(lanes: &mut Vec<Option<Oid>>, col: usize, commit: &CommitInfo) {
     // Additional parents (merge commits) get new lanes
     for &extra_parent in &parents[1..] {
         // Check if any existing lane already tracks this parent
-        let already_tracked = lanes.iter().any(|l| *l == Some(extra_parent));
+        let already_tracked = lanes.contains(&Some(extra_parent));
         if !already_tracked {
             // Find a free slot or append
             let placed = lanes.iter_mut().enumerate().find(|(_, l)| l.is_none());
@@ -163,7 +164,7 @@ pub fn render_graph_prefix(row: &GraphRow) -> String {
             s.push('●');
         } else {
             // Check if there's a vertical connector
-            let has_connector = row.connectors.get(i).map_or(false, |c| {
+            let has_connector = row.connectors.get(i).is_some_and(|c| {
                 *c == Connector::Vertical
                     || *c == Connector::VerticalRight
                     || *c == Connector::VerticalLeft

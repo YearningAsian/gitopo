@@ -82,9 +82,7 @@ pub fn load_repo(path: &Path, show_all: bool, max_commits: usize) -> Result<Repo
         if b.is_head {
             return std::cmp::Ordering::Greater;
         }
-        a.is_remote
-            .cmp(&b.is_remote)
-            .then(a.name.cmp(&b.name))
+        a.is_remote.cmp(&b.is_remote).then(a.name.cmp(&b.name))
     });
 
     let repo_path = repo
@@ -113,7 +111,11 @@ fn get_head_branch(repo: &Repository) -> Option<String> {
     }
 }
 
-fn collect_branches(repo: &Repository, show_all: bool, head_name: Option<&str>) -> Result<Vec<BranchInfo>> {
+fn collect_branches(
+    repo: &Repository,
+    show_all: bool,
+    head_name: Option<&str>,
+) -> Result<Vec<BranchInfo>> {
     let filter = if show_all {
         None
     } else {
@@ -155,12 +157,7 @@ fn collect_branches(repo: &Repository, show_all: bool, head_name: Option<&str>) 
         // local branches share a tip commit
         let is_head = !is_remote && head_name == Some(name.as_str());
 
-        let tip_message = commit
-            .summary()
-            .unwrap_or("")
-            .chars()
-            .take(80)
-            .collect();
+        let tip_message = commit.summary().unwrap_or("").chars().take(80).collect();
 
         let tip_author = commit.author().name().unwrap_or("?").to_owned();
         let tip_time = commit.time().seconds();
@@ -217,12 +214,7 @@ fn walk_commits(
             .map(|b| b.as_str().unwrap_or("???????").to_owned())
             .unwrap_or_else(|_| format!("{:.7}", oid));
 
-        let message = commit
-            .summary()
-            .unwrap_or("")
-            .chars()
-            .take(80)
-            .collect();
+        let message = commit.summary().unwrap_or("").chars().take(80).collect();
 
         let author = commit.author().name().unwrap_or("?").to_owned();
         let time = commit.time().seconds();
@@ -247,7 +239,9 @@ fn walk_commits(
 
 fn compute_ahead_behind(repo: &Repository, branch: &BranchInfo) -> Option<(usize, usize)> {
     let upstream_name = branch.upstream.as_ref()?;
-    let upstream_ref = repo.find_reference(&format!("refs/remotes/{}", upstream_name)).ok()?;
+    let upstream_ref = repo
+        .find_reference(&format!("refs/remotes/{}", upstream_name))
+        .ok()?;
     let upstream_oid = upstream_ref.target()?;
     let (ahead, behind) = repo.graph_ahead_behind(branch.tip_oid, upstream_oid).ok()?;
     Some((ahead, behind))
