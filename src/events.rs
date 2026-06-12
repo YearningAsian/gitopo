@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
@@ -22,7 +22,9 @@ impl EventHandler {
     pub fn next(&self) -> Result<AppEvent> {
         if event::poll(self.tick_rate)? {
             match event::read()? {
-                Event::Key(key) => Ok(AppEvent::Key(key)),
+                // Only react to key presses: on Windows, crossterm also delivers
+                // Release (and Repeat) events, which would double every keystroke.
+                Event::Key(key) if key.kind == KeyEventKind::Press => Ok(AppEvent::Key(key)),
                 _ => Ok(AppEvent::Tick),
             }
         } else {

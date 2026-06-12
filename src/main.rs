@@ -45,6 +45,15 @@ fn main() -> Result<()> {
 
     let mut app = App::new(repo_path, cli.all, cli.max_commits)?;
 
+    // Restore the terminal even if we panic, so the user's shell isn't left
+    // in raw mode on the alternate screen.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+        default_hook(info);
+    }));
+
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen)?;

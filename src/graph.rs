@@ -80,11 +80,22 @@ pub fn build_graph(
 }
 
 fn find_or_assign_lane(lanes: &mut Vec<Option<Oid>>, oid: Oid) -> usize {
-    // Look for a lane already waiting for this OID
-    for (i, lane) in lanes.iter().enumerate() {
+    // Collapse every lane waiting for this OID into the leftmost one.
+    // Multiple lanes can converge on the same commit (e.g. two branches that
+    // share history); without clearing the duplicates they would keep drawing
+    // phantom vertical lines below this row forever.
+    let mut found: Option<usize> = None;
+    for (i, lane) in lanes.iter_mut().enumerate() {
         if *lane == Some(oid) {
-            return i;
+            if found.is_none() {
+                found = Some(i);
+            } else {
+                *lane = None;
+            }
         }
+    }
+    if let Some(i) = found {
+        return i;
     }
     // No lane waiting — assign leftmost free lane
     for (i, lane) in lanes.iter_mut().enumerate() {
