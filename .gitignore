@@ -1,1 +1,10 @@
 /target
+
+# Local working notes — never commit
+AGENTS.md
+task_plan.md
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
