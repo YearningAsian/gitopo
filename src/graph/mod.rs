@@ -1,38 +1,12 @@
-/// Builds an ASCII-art graph column structure for commit history rendering.
-/// Each commit gets a column position; merge commits show connecting lines.
+mod render;
+mod types;
+
+pub use render::render_graph_prefix;
+pub use types::{Connector, GraphRow};
+
 use crate::git::CommitInfo;
 use git2::Oid;
 use std::collections::HashMap;
-
-#[derive(Debug, Clone)]
-pub struct GraphRow {
-    pub oid: Oid,
-    /// Which column this commit sits in
-    pub col: usize,
-    /// Number of columns in this row
-    pub num_cols: usize,
-    /// Connector lines to draw below this row (col_index -> ConnectorKind)
-    pub connectors: Vec<Connector>,
-    /// Branch labels to display (branch names pointing here)
-    #[allow(dead_code)]
-    pub branch_labels: Vec<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Connector {
-    Vertical,
-    VerticalRight,
-    VerticalLeft,
-    #[allow(dead_code)]
-    MergeLeft,
-    #[allow(dead_code)]
-    MergeRight,
-    #[allow(dead_code)]
-    Horizontal,
-    #[allow(dead_code)]
-    BranchDown,
-    Empty,
-}
 
 pub fn build_graph(
     topo_order: &[Oid],
@@ -43,7 +17,6 @@ pub fn build_graph(
         return Vec::new();
     }
 
-    // Active lanes: each lane holds the OID it's "waiting for" (its child's parent)
     let mut lanes: Vec<Option<Oid>> = Vec::new();
     let mut rows = Vec::with_capacity(topo_order.len());
 
@@ -53,18 +26,14 @@ pub fn build_graph(
             None => continue,
         };
 
-        // Find or assign a lane for this commit
         let col = find_or_assign_lane(&mut lanes, oid);
-
-        let branch_labels = oid_to_branches.get(&oid).cloned().unwrap_or_default();
-
         let num_cols = lanes.iter().filter(|l| l.is_some()).count().max(col + 1);
-
-        // Compute connectors (simplified: vertical lines for active lanes)
         let connectors = build_connectors(&lanes, col, commit);
 
-        // Update lanes: replace this commit's slot with its first parent,
-        // add extra parents to new lanes
+        // Suppress unused warning: oid_to_branches is intentionally not stored on
+        // GraphRow (the UI reads labels directly from RepoData.oid_to_branches).
+        let _ = oid_to_branches;
+
         update_lanes(&mut lanes, col, commit);
 
         rows.push(GraphRow {
@@ -72,7 +41,6 @@ pub fn build_graph(
             col,
             num_cols,
             connectors,
-            branch_labels,
         });
     }
 
@@ -81,9 +49,7 @@ pub fn build_graph(
 
 fn find_or_assign_lane(lanes: &mut Vec<Option<Oid>>, oid: Oid) -> usize {
     // Collapse every lane waiting for this OID into the leftmost one.
-    // Multiple lanes can converge on the same commit (e.g. two branches that
-    // share history); without clearing the duplicates they would keep drawing
-    // phantom vertical lines below this row forever.
+    // Without clearing duplicates, converging branches draw phantom │ lines.
     let mut found: Option<usize> = None;
     for (i, lane) in lanes.iter_mut().enumerate() {
         if *lane == Some(oid) {
@@ -97,7 +63,6 @@ fn find_or_assign_lane(lanes: &mut Vec<Option<Oid>>, oid: Oid) -> usize {
     if let Some(i) = found {
         return i;
     }
-    // No lane waiting — assign leftmost free lane
     for (i, lane) in lanes.iter_mut().enumerate() {
         if lane.is_none() {
             *lane = Some(oid);
@@ -122,7 +87,6 @@ fn build_connectors(
         }
     }
 
-    // If commit has parents, show continuation
     if !commit.parent_oids.is_empty() {
         connectors[commit_col] = Connector::Vertical;
     }
@@ -134,24 +98,18 @@ fn update_lanes(lanes: &mut Vec<Option<Oid>>, col: usize, commit: &CommitInfo) {
     let parents = &commit.parent_oids;
 
     if parents.is_empty() {
-        // Root commit — free the lane
         if col < lanes.len() {
             lanes[col] = None;
         }
         return;
     }
 
-    // First parent continues in the same lane
     lanes[col] = Some(parents[0]);
 
-    // Additional parents (merge commits) get new lanes
     for &extra_parent in &parents[1..] {
-        // Check if any existing lane already tracks this parent
-        let already_tracked = lanes.contains(&Some(extra_parent));
-        if !already_tracked {
-            // Find a free slot or append
-            let placed = lanes.iter_mut().enumerate().find(|(_, l)| l.is_none());
-            if let Some((_, slot)) = placed {
+        if !lanes.contains(&Some(extra_parent)) {
+            let placed = lanes.iter_mut().find(|l| l.is_none());
+            if let Some(slot) = placed {
                 *slot = Some(extra_parent);
             } else {
                 lanes.push(Some(extra_parent));
@@ -159,58 +117,9 @@ fn update_lanes(lanes: &mut Vec<Option<Oid>>, col: usize, commit: &CommitInfo) {
         }
     }
 
-    // Compact trailing None lanes
     while lanes.last() == Some(&None) {
         lanes.pop();
     }
-}
-
-/// Render the graph column prefix string for a given row
-pub fn render_graph_prefix(row: &GraphRow) -> String {
-    let width = row.num_cols.max(row.col + 1);
-    let mut s = String::with_capacity(width * 2);
-
-    for i in 0..width {
-        if i == row.col {
-            s.push('●');
-        } else {
-            // Check if there's a vertical connector
-            let has_connector = row.connectors.get(i).is_some_and(|c| {
-                *c == Connector::Vertical
-                    || *c == Connector::VerticalRight
-                    || *c == Connector::VerticalLeft
-            });
-            if has_connector {
-                s.push('│');
-            } else {
-                s.push(' ');
-            }
-        }
-        s.push(' ');
-    }
-
-    s
-}
-
-#[allow(dead_code)]
-pub fn render_connector_prefix(row: &GraphRow) -> String {
-    let width = row.num_cols.max(row.col + 1);
-    let mut s = String::with_capacity(width * 2);
-
-    for i in 0..width {
-        let c = row.connectors.get(i).unwrap_or(&Connector::Empty);
-        match c {
-            Connector::Vertical | Connector::VerticalRight | Connector::VerticalLeft => {
-                s.push('│');
-            }
-            _ => {
-                s.push(' ');
-            }
-        }
-        s.push(' ');
-    }
-
-    s
 }
 
 #[cfg(test)]
@@ -259,29 +168,26 @@ mod tests {
 
     #[test]
     fn merge_opens_a_second_lane() {
-        // M merges B and C; both descend from root R
         let rows = graph_for(vec![
-            commit(oid(4), vec![oid(3), oid(2)]), // M
-            commit(oid(3), vec![oid(1)]),         // B
-            commit(oid(2), vec![oid(1)]),         // C
-            commit(oid(1), vec![]),               // R
+            commit(oid(4), vec![oid(3), oid(2)]),
+            commit(oid(3), vec![oid(1)]),
+            commit(oid(2), vec![oid(1)]),
+            commit(oid(1), vec![]),
         ]);
         assert_eq!(rows.len(), 4);
-        assert_eq!(rows[0].col, 0); // M
-        assert_eq!(rows[1].col, 0); // B continues M's lane
-        assert_eq!(rows[2].col, 1); // C sits in the merge lane
-        assert_eq!(rows[3].col, 0); // R collapses back to lane 0
+        assert_eq!(rows[0].col, 0);
+        assert_eq!(rows[1].col, 0);
+        assert_eq!(rows[2].col, 1);
+        assert_eq!(rows[3].col, 0);
     }
 
     #[test]
     fn converging_lanes_collapse_at_shared_ancestor() {
-        // Regression: B and C both point at R; once R is emitted the duplicate
-        // lane must be cleared instead of drawing phantom lines forever.
         let rows = graph_for(vec![
-            commit(oid(4), vec![oid(3), oid(2)]), // M
-            commit(oid(3), vec![oid(1)]),         // B -> R
-            commit(oid(2), vec![oid(1)]),         // C -> R
-            commit(oid(1), vec![]),               // R
+            commit(oid(4), vec![oid(3), oid(2)]),
+            commit(oid(3), vec![oid(1)]),
+            commit(oid(2), vec![oid(1)]),
+            commit(oid(1), vec![]),
         ]);
         let root_row = &rows[3];
         assert_eq!(root_row.num_cols, 1, "stale duplicate lane survived");
@@ -294,12 +200,12 @@ mod tests {
 
     #[test]
     fn render_prefix_marks_commit_and_connectors() {
+        use super::render::render_graph_prefix;
         let row = GraphRow {
             oid: oid(1),
             col: 0,
             num_cols: 2,
             connectors: vec![Connector::Vertical, Connector::Vertical],
-            branch_labels: Vec::new(),
         };
         assert_eq!(render_graph_prefix(&row), "● │ ");
     }

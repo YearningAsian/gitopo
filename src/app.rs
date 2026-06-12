@@ -6,10 +6,6 @@ use crate::events::{key_to_action, Action, AppEvent};
 use crate::git::{self, BranchInfo, RepoData};
 use crate::graph::{build_graph, GraphRow};
 
-pub fn now_timestamp() -> i64 {
-    chrono::Utc::now().timestamp()
-}
-
 fn index_graph_rows(rows: &[GraphRow]) -> HashMap<git2::Oid, usize> {
     rows.iter().enumerate().map(|(i, r)| (r.oid, i)).collect()
 }
@@ -155,19 +151,6 @@ impl App {
 
     pub fn selected_commit_oid(&self) -> Option<git2::Oid> {
         self.active_branch_oids.get(self.graph_selected).copied()
-    }
-
-    /// Returns branches to display (filtered if search active)
-    #[allow(dead_code)]
-    pub fn visible_branches(&self) -> Vec<(usize, &BranchInfo)> {
-        if self.search_query.is_empty() || !self.search_mode && self.search_matches.is_empty() {
-            self.repo_data.branches.iter().enumerate().collect()
-        } else {
-            self.search_matches
-                .iter()
-                .filter_map(|&i| self.repo_data.branches.get(i).map(|b| (i, b)))
-                .collect()
-        }
     }
 
     pub fn handle_event(&mut self, event: AppEvent) -> Result<bool> {
