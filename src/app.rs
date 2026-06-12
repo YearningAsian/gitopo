@@ -5,9 +5,45 @@ use std::path::PathBuf;
 use crate::events::{key_to_action, Action, AppEvent};
 use crate::git::{self, BranchInfo, RepoData};
 use crate::graph::{build_graph, GraphRow};
+use crate::ui::theme::Theme;
 
 fn index_graph_rows(rows: &[GraphRow]) -> HashMap<git2::Oid, usize> {
     rows.iter().enumerate().map(|(i, r)| (r.oid, i)).collect()
+}
+
+/// Pure helper: decide how branch `idx` should be highlighted given the search
+/// query, the list of matching branch indices, and the active match cursor.
+/// Returns `None` when there is no active query / no matches, or when `idx`
+/// is not among the matches.
+fn compute_search_highlight(
+    idx: usize,
+    query: &str,
+    matches: &[usize],
+    active_idx: usize,
+) -> Option<SearchHighlight> {
+    if query.is_empty() || matches.is_empty() {
+        return None;
+    }
+    if matches.get(active_idx).copied() == Some(idx) {
+        Some(SearchHighlight::Active)
+    } else if matches.contains(&idx) {
+        Some(SearchHighlight::Match)
+    } else {
+        None
+    }
+}
+
+/// Pure helper: branch indices whose (lowercased) name contains the query.
+/// Mirrors the filtering used by interactive search so it can be unit-tested
+/// without constructing a full [`App`].
+fn matching_branch_indices(names: &[String], query: &str) -> Vec<usize> {
+    let q = query.to_lowercase();
+    names
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.to_lowercase().contains(&q))
+        .map(|(i, _)| i)
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,11 +53,22 @@ pub enum Focus {
     Help,
 }
 
+/// How a branch row should be highlighted with respect to the active search.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SearchHighlight {
+    /// A branch that matches the query but is not the current focus.
+    Match,
+    /// The branch the `n`/`N` cursor is currently sitting on.
+    Active,
+}
+
 #[derive(Debug)]
 pub struct App {
     pub repo_path: PathBuf,
     pub show_all: bool,
     pub max_commits: usize,
+    /// Resolved colour palette (honours the `--no-color` flag).
+    pub theme: Theme,
 
     pub repo_data: RepoData,
     pub graph_rows: Vec<GraphRow>,
@@ -51,7 +98,12 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(repo_path: PathBuf, show_all: bool, max_commits: usize) -> Result<Self> {
+    pub fn new(
+        repo_path: PathBuf,
+        show_all: bool,
+        max_commits: usize,
+        no_color: bool,
+    ) -> Result<Self> {
         let repo_data = git::load_repo(&repo_path, show_all, max_commits)?;
         let graph_rows = build_graph(
             &repo_data.topo_order,
@@ -64,6 +116,7 @@ impl App {
             repo_path,
             show_all,
             max_commits,
+            theme: Theme::new(no_color),
             repo_data,
             graph_rows,
             graph_index,
@@ -147,6 +200,18 @@ impl App {
 
     pub fn selected_branch(&self) -> Option<&BranchInfo> {
         self.repo_data.branches.get(self.branch_selected)
+    }
+
+    /// Returns the highlight kind for a branch at `idx` given the current
+    /// search state. `None` means the branch is not a search match (or there
+    /// is no active query).
+    pub fn search_highlight(&self, idx: usize) -> Option<SearchHighlight> {
+        compute_search_highlight(
+            idx,
+            &self.search_query,
+            &self.search_matches,
+            self.search_match_idx,
+        )
     }
 
     pub fn selected_commit_oid(&self) -> Option<git2::Oid> {
@@ -320,15 +385,13 @@ impl App {
     }
 
     fn update_search(&mut self) {
-        let q = self.search_query.to_lowercase();
-        self.search_matches = self
+        let names: Vec<String> = self
             .repo_data
             .branches
             .iter()
-            .enumerate()
-            .filter(|(_, b)| b.name.to_lowercase().contains(&q))
-            .map(|(i, _)| i)
+            .map(|b| b.name.clone())
             .collect();
+        self.search_matches = matching_branch_indices(&names, &self.search_query);
         self.search_match_idx = 0;
         if let Some(&first) = self.search_matches.first() {
             self.branch_selected = first;
@@ -370,5 +433,72 @@ impl App {
         } else if self.graph_selected >= self.graph_offset + viewport_height {
             self.graph_offset = self.graph_selected + 1 - viewport_height;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn matching_is_case_insensitive_substring() {
+        let n = names(&["main", "feature/Auth", "release/payments"]);
+        assert_eq!(matching_branch_indices(&n, "auth"), vec![1]);
+        assert_eq!(matching_branch_indices(&n, "MAIN"), vec![0]);
+        // Substring, not prefix
+        assert_eq!(matching_branch_indices(&n, "ment"), vec![2]);
+    }
+
+    #[test]
+    fn empty_query_matches_everything() {
+        let n = names(&["a", "b", "c"]);
+        assert_eq!(matching_branch_indices(&n, ""), vec![0, 1, 2]);
+    }
+
+    #[test]
+    fn no_match_yields_empty() {
+        let n = names(&["main", "dev"]);
+        assert!(matching_branch_indices(&n, "zzz").is_empty());
+    }
+
+    #[test]
+    fn highlight_none_without_query_or_matches() {
+        assert_eq!(compute_search_highlight(0, "", &[0, 1], 0), None);
+        assert_eq!(compute_search_highlight(0, "x", &[], 0), None);
+    }
+
+    #[test]
+    fn highlight_marks_active_and_other_matches() {
+        let matches = vec![2, 5, 7];
+        // active cursor on the second match (index 5)
+        assert_eq!(
+            compute_search_highlight(5, "x", &matches, 1),
+            Some(SearchHighlight::Active)
+        );
+        // other matched branches are plain matches
+        assert_eq!(
+            compute_search_highlight(2, "x", &matches, 1),
+            Some(SearchHighlight::Match)
+        );
+        assert_eq!(
+            compute_search_highlight(7, "x", &matches, 1),
+            Some(SearchHighlight::Match)
+        );
+        // a non-matching branch gets nothing
+        assert_eq!(compute_search_highlight(3, "x", &matches, 1), None);
+    }
+
+    #[test]
+    fn highlight_handles_out_of_range_active_idx() {
+        // active_idx past the end must not panic and must not mark Active
+        let matches = vec![1, 4];
+        assert_eq!(
+            compute_search_highlight(1, "x", &matches, 9),
+            Some(SearchHighlight::Match)
+        );
     }
 }
