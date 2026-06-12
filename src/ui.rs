@@ -71,7 +71,10 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 }
 
 fn render_title_bar(frame: &mut Frame, app: &App, area: Rect) {
-    let repo_display = truncate_path(&app.repo_data.repo_path, area.width as usize - 20);
+    let repo_display = truncate_path(
+        &app.repo_data.repo_path,
+        (area.width as usize).saturating_sub(20),
+    );
     let mode = if app.show_all { " [all]" } else { " [local]" };
     let title = format!(" gitopo  {}{}  ", repo_display, mode);
     let paragraph = Paragraph::new(title).style(
@@ -245,10 +248,6 @@ fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
         .copied()
         .collect();
 
-    // Build graph lookup
-    let graph_map: std::collections::HashMap<git2::Oid, &crate::graph::GraphRow> =
-        app.graph_rows.iter().map(|r| (r.oid, r)).collect();
-
     let mut y = inner.y;
     for (local_idx, oid) in visible_oids.iter().enumerate() {
         let global_idx = local_idx + visible_start;
@@ -259,9 +258,12 @@ fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
             None => continue,
         };
 
-        let graph_row = graph_map.get(oid);
+        let graph_row = app
+            .graph_index
+            .get(oid)
+            .and_then(|&i| app.graph_rows.get(i));
         let graph_prefix = graph_row
-            .map(|r| render_graph_prefix(r))
+            .map(render_graph_prefix)
             .unwrap_or_else(|| "● ".to_string());
 
         let row_area = Rect {
@@ -277,7 +279,6 @@ fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
             commit,
             &graph_prefix,
             is_selected,
-            &graph_map,
             &app.repo_data.oid_to_branches,
             inner.width as usize,
             now,
@@ -297,7 +298,6 @@ fn render_commit_row(
     commit: &CommitInfo,
     graph_prefix: &str,
     is_selected: bool,
-    _graph_map: &std::collections::HashMap<git2::Oid, &crate::graph::GraphRow>,
     oid_to_branches: &std::collections::HashMap<git2::Oid, Vec<String>>,
     max_width: usize,
     now: i64,
@@ -343,7 +343,10 @@ fn render_commit_row(
     ));
 
     // Message
-    let used: usize = spans.iter().map(|s| s.content.len()).sum();
+    let used: usize = spans
+        .iter()
+        .map(|s| unicode_width::UnicodeWidthStr::width(s.content.as_ref()))
+        .sum();
     let remaining = max_width.saturating_sub(used + 8); // reserve for time
     let msg = truncate_str(&commit.message, remaining);
     spans.push(Span::styled(msg, Style::default().patch(bg)));
@@ -459,14 +462,18 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
 }
 
 fn render_search_overlay(frame: &mut Frame, app: &App, area: Rect) {
+    const POPUP_HEIGHT: u16 = 3;
+    if area.height < POPUP_HEIGHT + 1 || area.width < 8 {
+        return; // terminal too small for the overlay
+    }
     let popup_width = area.width.min(60);
     let popup_x = area.x + (area.width - popup_width) / 2;
-    let popup_y = area.y + area.height - 4;
+    let popup_y = area.y + area.height - POPUP_HEIGHT - 1;
     let popup_area = Rect {
         x: popup_x,
         y: popup_y,
         width: popup_width,
-        height: 3,
+        height: POPUP_HEIGHT,
     };
 
     frame.render_widget(Clear, popup_area);

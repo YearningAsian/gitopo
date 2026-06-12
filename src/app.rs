@@ -1,4 +1,5 @@
 use anyhow::Result;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::events::{key_to_action, Action, AppEvent};
@@ -7,6 +8,10 @@ use crate::graph::{build_graph, GraphRow};
 
 pub fn now_timestamp() -> i64 {
     chrono::Utc::now().timestamp()
+}
+
+fn index_graph_rows(rows: &[GraphRow]) -> HashMap<git2::Oid, usize> {
+    rows.iter().enumerate().map(|(i, r)| (r.oid, i)).collect()
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,6 +29,9 @@ pub struct App {
 
     pub repo_data: RepoData,
     pub graph_rows: Vec<GraphRow>,
+    /// Lookup from commit OID to its index in `graph_rows`, rebuilt on reload
+    /// so rendering doesn't have to reconstruct it every frame.
+    pub graph_index: HashMap<git2::Oid, usize>,
 
     pub focus: Focus,
 
@@ -54,6 +62,7 @@ impl App {
             &repo_data.commits,
             &repo_data.oid_to_branches,
         );
+        let graph_index = index_graph_rows(&graph_rows);
 
         let mut app = Self {
             repo_path,
@@ -61,6 +70,7 @@ impl App {
             max_commits,
             repo_data,
             graph_rows,
+            graph_index,
             focus: Focus::BranchList,
             branch_offset: 0,
             branch_selected: 0,
@@ -85,6 +95,7 @@ impl App {
             &self.repo_data.commits,
             &self.repo_data.oid_to_branches,
         );
+        self.graph_index = index_graph_rows(&self.graph_rows);
         let prev = self
             .branch_selected
             .min(self.repo_data.branches.len().saturating_sub(1));
