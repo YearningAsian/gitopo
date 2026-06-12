@@ -70,11 +70,11 @@ fn main() -> Result<()> {
     result
 }
 
-fn run_app<B: ratatui::backend::Backend>(
-    terminal: &mut Terminal<B>,
-    app: &mut App,
-    event_handler: EventHandler,
-) -> Result<()> {
+fn run_app<B>(terminal: &mut Terminal<B>, app: &mut App, event_handler: EventHandler) -> Result<()>
+where
+    B: ratatui::backend::Backend,
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
     loop {
         terminal.draw(|frame| ui::render(frame, app))?;
 

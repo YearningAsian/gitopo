@@ -105,7 +105,7 @@ pub fn load_repo(path: &Path, show_all: bool, max_commits: usize) -> Result<Repo
 fn get_head_branch(repo: &Repository) -> Option<String> {
     let head = repo.head().ok()?;
     if head.is_branch() {
-        head.shorthand().map(|s| s.to_owned())
+        head.shorthand().ok().map(|s| s.to_owned())
     } else {
         None
     }
@@ -157,7 +157,7 @@ fn collect_branches(
         // local branches share a tip commit
         let is_head = !is_remote && head_name == Some(name.as_str());
 
-        let tip_message = commit.summary().unwrap_or("").chars().take(80).collect();
+        let tip_message = commit.summary().ok().flatten().unwrap_or("").chars().take(80).collect();
 
         let tip_author = commit.author().name().unwrap_or("?").to_owned();
         let tip_time = commit.time().seconds();
@@ -214,7 +214,7 @@ fn walk_commits(
             .map(|b| b.as_str().unwrap_or("???????").to_owned())
             .unwrap_or_else(|_| format!("{:.7}", oid));
 
-        let message = commit.summary().unwrap_or("").chars().take(80).collect();
+        let message = commit.summary().ok().flatten().unwrap_or("").chars().take(80).collect();
 
         let author = commit.author().name().unwrap_or("?").to_owned();
         let time = commit.time().seconds();
