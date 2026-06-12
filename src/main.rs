@@ -34,6 +34,10 @@ struct Cli {
     /// Maximum number of commits to load per branch
     #[arg(short = 'n', long, default_value = "200")]
     max_commits: usize,
+
+    /// Disable colour styling (render with the terminal's default colours)
+    #[arg(long)]
+    no_color: bool,
 }
 
 fn main() -> Result<()> {
@@ -43,7 +47,7 @@ fn main() -> Result<()> {
         .path
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
 
-    let mut app = App::new(repo_path, cli.all, cli.max_commits)?;
+    let mut app = App::new(repo_path, cli.all, cli.max_commits, cli.no_color)?;
 
     // Restore the terminal even if we panic, so the user's shell isn't left
     // in raw mode on the alternate screen.

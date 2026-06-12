@@ -1,6 +1,6 @@
 use ratatui::{
     layout::Rect,
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Wrap},
     Frame,
@@ -9,15 +9,14 @@ use ratatui::{
 use crate::app::App;
 use crate::git::format_relative_time_with_now;
 
-use super::theme::{COLOR_BORDER_UNFOCUSED, COLOR_DIM, COLOR_LOCAL, COLOR_TAG, COLOR_TITLE};
-
 pub fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
+    let theme = &app.theme;
     let block = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(COLOR_BORDER_UNFOCUSED))
+        .border_style(Style::default().fg(theme.border_unfocused))
         .title(Span::styled(
             " Commit Details ",
-            Style::default().fg(COLOR_TITLE),
+            Style::default().fg(theme.title),
         ));
 
     let inner = block.inner(area);
@@ -33,23 +32,20 @@ pub fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
     let mut lines: Vec<Line> = Vec::new();
 
     lines.push(Line::from(vec![
-        Span::styled("commit  ", Style::default().fg(COLOR_DIM)),
-        Span::styled(
-            format!("{}", oid),
-            Style::default().fg(Color::Rgb(255, 200, 100)),
-        ),
+        Span::styled("commit  ", Style::default().fg(theme.dim)),
+        Span::styled(format!("{}", oid), Style::default().fg(theme.hash)),
     ]));
 
     lines.push(Line::from(vec![
-        Span::styled("author  ", Style::default().fg(COLOR_DIM)),
-        Span::styled(commit.author.clone(), Style::default().fg(COLOR_LOCAL)),
+        Span::styled("author  ", Style::default().fg(theme.dim)),
+        Span::styled(commit.author.clone(), Style::default().fg(theme.local)),
     ]));
 
     lines.push(Line::from(vec![
-        Span::styled("date    ", Style::default().fg(COLOR_DIM)),
+        Span::styled("date    ", Style::default().fg(theme.dim)),
         Span::styled(
             format_relative_time_with_now(commit.time, now),
-            Style::default().fg(COLOR_DIM),
+            Style::default().fg(theme.dim),
         ),
     ]));
 
@@ -60,8 +56,8 @@ pub fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
             .map(|p| format!("{:.7}", p))
             .collect();
         lines.push(Line::from(vec![
-            Span::styled("parents ", Style::default().fg(COLOR_DIM)),
-            Span::styled(parents.join("  "), Style::default().fg(COLOR_DIM)),
+            Span::styled("parents ", Style::default().fg(theme.dim)),
+            Span::styled(parents.join("  "), Style::default().fg(theme.dim)),
         ]));
     }
 
@@ -69,7 +65,7 @@ pub fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
     lines.push(Line::from(Span::styled(
         commit.message.clone(),
         Style::default()
-            .fg(Color::White)
+            .fg(theme.text_strong)
             .add_modifier(Modifier::BOLD),
     )));
 
@@ -79,7 +75,7 @@ pub fn render_detail_pane(frame: &mut Frame, app: &App, area: Rect, now: i64) {
             .iter()
             .flat_map(|l| {
                 vec![
-                    Span::styled(format!("[{}]", l), Style::default().fg(COLOR_TAG)),
+                    Span::styled(format!("[{}]", l), Style::default().fg(theme.tag)),
                     Span::raw(" "),
                 ]
             })

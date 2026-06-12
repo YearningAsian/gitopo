@@ -6,21 +6,21 @@ pub mod theme;
 
 use ratatui::{
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Modifier, Style},
     widgets::Paragraph,
     Frame,
 };
 
 use crate::app::{App, Focus};
 
-use self::theme::{truncate_path, COLOR_DIM, COLOR_TITLE};
+use self::theme::truncate_path;
 
 pub fn render(frame: &mut Frame, app: &mut App) {
     let area = frame.area();
     let now = chrono::Utc::now().timestamp();
 
     if app.focus == Focus::Help {
-        overlay::render_help(frame, area);
+        overlay::render_help(frame, area, &app.theme);
         return;
     }
 
@@ -64,8 +64,8 @@ fn render_title_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) {
     let title = format!(" gitopo  {}{}  ", repo_display, mode);
     let paragraph = Paragraph::new(title).style(
         Style::default()
-            .fg(COLOR_TITLE)
-            .bg(Color::Rgb(25, 28, 38))
+            .fg(app.theme.title)
+            .bg(app.theme.title_bar_bg)
             .add_modifier(Modifier::BOLD),
     );
     frame.render_widget(paragraph, area);
@@ -87,7 +87,11 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: ratatui::layout::Rect) 
     };
 
     frame.render_widget(
-        Paragraph::new(msg).style(Style::default().fg(COLOR_DIM).bg(Color::Rgb(20, 22, 30))),
+        Paragraph::new(msg).style(
+            Style::default()
+                .fg(app.theme.dim)
+                .bg(app.theme.status_bar_bg),
+        ),
         area,
     );
 }

@@ -11,20 +11,18 @@ use crate::app::{App, Focus};
 use crate::git::{format_relative_time_with_now, CommitInfo};
 use crate::graph::render_graph_prefix;
 
-use super::theme::{
-    truncate_str, COLOR_BORDER_FOCUSED, COLOR_BORDER_UNFOCUSED, COLOR_DIM, COLOR_GRAPH_LINE,
-    COLOR_GRAPH_NODE, COLOR_SELECTED_BG, COLOR_TAG, COLOR_TITLE,
-};
+use super::theme::{truncate_str, Theme};
 
 pub fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
     let inner_height = area.height.saturating_sub(2) as usize;
     app.scroll_graph(inner_height);
 
+    let theme = app.theme;
     let focused = app.focus == Focus::CommitGraph;
     let border_color = if focused {
-        COLOR_BORDER_FOCUSED
+        theme.border_focused
     } else {
-        COLOR_BORDER_UNFOCUSED
+        theme.border_unfocused
     };
 
     let branch_name = app
@@ -40,7 +38,7 @@ pub fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i6
         .title(Span::styled(
             title,
             Style::default()
-                .fg(COLOR_TITLE)
+                .fg(theme.title)
                 .add_modifier(Modifier::BOLD),
         ));
 
@@ -90,6 +88,7 @@ pub fn render_commit_graph(frame: &mut Frame, app: &mut App, area: Rect, now: i6
                 oid_to_branches: &app.repo_data.oid_to_branches,
                 max_width: inner.width as usize,
                 now,
+                theme: &theme,
             },
         );
 
@@ -107,6 +106,7 @@ struct CommitRowData<'a> {
     oid_to_branches: &'a HashMap<git2::Oid, Vec<String>>,
     max_width: usize,
     now: i64,
+    theme: &'a Theme,
 }
 
 fn render_commit_row(frame: &mut Frame, area: Rect, data: CommitRowData<'_>) {
@@ -117,10 +117,11 @@ fn render_commit_row(frame: &mut Frame, area: Rect, data: CommitRowData<'_>) {
         oid_to_branches,
         max_width,
         now,
+        theme,
     } = data;
 
     let bg = if is_selected {
-        Style::default().bg(COLOR_SELECTED_BG)
+        Style::default().bg(theme.selected_bg)
     } else {
         Style::default()
     };
@@ -129,11 +130,11 @@ fn render_commit_row(frame: &mut Frame, area: Rect, data: CommitRowData<'_>) {
 
     for ch in graph_prefix.chars() {
         let (c, style) = match ch {
-            '●' => (ch, Style::default().fg(COLOR_GRAPH_NODE)),
-            '│' | '├' | '╮' | '╭' | '╯' | '╰' | '─' => {
-                (ch, Style::default().fg(COLOR_GRAPH_LINE))
+            '●' => (ch, Style::default().fg(theme.graph_node)),
+            '│' | '├' | '┤' | '┬' | '┴' | '┼' | '╮' | '╭' | '╯' | '╰' | '─' => {
+                (ch, Style::default().fg(theme.graph_line))
             }
-            _ => (ch, Style::default().fg(COLOR_DIM)),
+            _ => (ch, Style::default().fg(theme.dim)),
         };
         spans.push(Span::styled(c.to_string(), style.patch(bg)));
     }
@@ -143,7 +144,7 @@ fn render_commit_row(frame: &mut Frame, area: Rect, data: CommitRowData<'_>) {
             spans.push(Span::styled(
                 format!("[{}] ", label),
                 Style::default()
-                    .fg(COLOR_TAG)
+                    .fg(theme.tag)
                     .add_modifier(Modifier::BOLD)
                     .patch(bg),
             ));
@@ -152,7 +153,7 @@ fn render_commit_row(frame: &mut Frame, area: Rect, data: CommitRowData<'_>) {
 
     spans.push(Span::styled(
         format!("{} ", commit.short_id),
-        Style::default().fg(COLOR_DIM).patch(bg),
+        Style::default().fg(theme.dim).patch(bg),
     ));
 
     let used: usize = spans
@@ -166,7 +167,7 @@ fn render_commit_row(frame: &mut Frame, area: Rect, data: CommitRowData<'_>) {
     let time_str = format_relative_time_with_now(commit.time, now);
     spans.push(Span::styled(
         format!(" {}", time_str),
-        Style::default().fg(COLOR_DIM).patch(bg),
+        Style::default().fg(theme.dim).patch(bg),
     ));
 
     frame.render_widget(Paragraph::new(Line::from(spans)).style(bg), area);

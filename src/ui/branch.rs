@@ -6,23 +6,21 @@ use ratatui::{
     Frame,
 };
 
-use crate::app::{App, Focus};
+use crate::app::{App, Focus, SearchHighlight};
 use crate::git::{format_relative_time_with_now, BranchInfo};
 
-use super::theme::{
-    truncate_str, COLOR_AHEAD, COLOR_BEHIND, COLOR_BORDER_FOCUSED, COLOR_BORDER_UNFOCUSED,
-    COLOR_DIM, COLOR_HEAD, COLOR_LOCAL, COLOR_REMOTE, COLOR_SELECTED_BG, COLOR_TITLE,
-};
+use super::theme::{truncate_str, Theme};
 
 pub fn render_branch_list(frame: &mut Frame, app: &mut App, area: Rect, now: i64) {
     let inner_height = area.height.saturating_sub(2) as usize;
     app.scroll_branch_list(inner_height);
 
+    let theme = app.theme;
     let focused = app.focus == Focus::BranchList;
     let border_color = if focused {
-        COLOR_BORDER_FOCUSED
+        theme.border_focused
     } else {
-        COLOR_BORDER_UNFOCUSED
+        theme.border_unfocused
     };
 
     let branch_count = app.repo_data.branches.len();
@@ -34,7 +32,7 @@ pub fn render_branch_list(frame: &mut Frame, app: &mut App, area: Rect, now: i64
         .title(Span::styled(
             title,
             Style::default()
-                .fg(COLOR_TITLE)
+                .fg(theme.title)
                 .add_modifier(Modifier::BOLD),
         ));
 
@@ -50,7 +48,15 @@ pub fn render_branch_list(frame: &mut Frame, app: &mut App, area: Rect, now: i64
         .take(visible_end - visible_start)
         .map(|(i, branch)| {
             let is_selected = i == app.branch_selected;
-            build_branch_list_item(branch, is_selected, area.width as usize, now)
+            let highlight = app.search_highlight(i);
+            build_branch_list_item(
+                branch,
+                is_selected,
+                highlight,
+                area.width as usize,
+                now,
+                &theme,
+            )
         })
         .collect();
 
@@ -66,15 +72,16 @@ pub fn render_branch_list(frame: &mut Frame, app: &mut App, area: Rect, now: i64
 fn build_branch_list_item<'a>(
     branch: &'a BranchInfo,
     is_selected: bool,
+    highlight: Option<SearchHighlight>,
     width: usize,
     now: i64,
+    theme: &Theme,
 ) -> ListItem<'a> {
-    let name_color = if branch.is_head {
-        COLOR_HEAD
-    } else if branch.is_remote {
-        COLOR_REMOTE
-    } else {
-        COLOR_LOCAL
+    let name_color = match highlight {
+        Some(_) => theme.search_match,
+        None if branch.is_head => theme.head,
+        None if branch.is_remote => theme.remote,
+        None => theme.local,
     };
 
     let prefix = if branch.is_head {
@@ -90,17 +97,22 @@ fn build_branch_list_item<'a>(
 
     let time_str = format_relative_time_with_now(branch.tip_time, now);
 
+    // Underline search matches so they remain distinguishable even when colour
+    // is disabled (--no-color) or the row also carries a selection background.
+    let mut name_modifiers = if branch.is_head {
+        Modifier::BOLD
+    } else {
+        Modifier::empty()
+    };
+    if highlight.is_some() {
+        name_modifiers |= Modifier::UNDERLINED;
+    }
+
     let mut spans = vec![
         Span::styled(prefix, Style::default().fg(name_color)),
         Span::styled(
             display_name,
-            Style::default()
-                .fg(name_color)
-                .add_modifier(if branch.is_head {
-                    Modifier::BOLD
-                } else {
-                    Modifier::empty()
-                }),
+            Style::default().fg(name_color).add_modifier(name_modifiers),
         ),
     ];
 
@@ -110,13 +122,13 @@ fn build_branch_list_item<'a>(
             if ahead > 0 {
                 spans.push(Span::styled(
                     format!("↑{}", ahead),
-                    Style::default().fg(COLOR_AHEAD),
+                    Style::default().fg(theme.ahead),
                 ));
             }
             if behind > 0 {
                 spans.push(Span::styled(
                     format!("↓{}", behind),
-                    Style::default().fg(COLOR_BEHIND),
+                    Style::default().fg(theme.behind),
                 ));
             }
         }
@@ -124,11 +136,15 @@ fn build_branch_list_item<'a>(
 
     spans.push(Span::styled(
         format!(" {}", time_str),
-        Style::default().fg(COLOR_DIM),
+        Style::default().fg(theme.dim),
     ));
 
+    // Selection background wins; otherwise the active search match gets its own
+    // tint so the n/N cursor is obvious among the dimmer matches.
     let style = if is_selected {
-        Style::default().bg(COLOR_SELECTED_BG)
+        Style::default().bg(theme.selected_bg)
+    } else if highlight == Some(SearchHighlight::Active) {
+        Style::default().bg(theme.search_active_bg)
     } else {
         Style::default()
     };
