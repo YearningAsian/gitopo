@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use crate::app::{App, Focus};
 use crate::git::{format_relative_time_with_now, CommitInfo};
-use crate::graph::render_graph_prefix;
+use crate::graph::{classify_glyph, render_graph_prefix, GlyphKind};
 
 use super::theme::{truncate_str, Theme};
 
@@ -129,14 +129,15 @@ fn render_commit_row(frame: &mut Frame, area: Rect, data: CommitRowData<'_>) {
     let mut spans: Vec<Span> = Vec::new();
 
     for ch in graph_prefix.chars() {
-        let (c, style) = match ch {
-            '●' => (ch, Style::default().fg(theme.graph_node)),
-            '│' | '├' | '┤' | '┬' | '┴' | '┼' | '╮' | '╭' | '╯' | '╰' | '─' => {
-                (ch, Style::default().fg(theme.graph_line))
-            }
-            _ => (ch, Style::default().fg(theme.dim)),
+        let fg = match classify_glyph(ch) {
+            GlyphKind::Node => theme.graph_node,
+            GlyphKind::Line => theme.graph_line,
+            GlyphKind::Other => theme.dim,
         };
-        spans.push(Span::styled(c.to_string(), style.patch(bg)));
+        spans.push(Span::styled(
+            ch.to_string(),
+            Style::default().fg(fg).patch(bg),
+        ));
     }
 
     if let Some(labels) = oid_to_branches.get(&commit.oid) {

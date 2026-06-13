@@ -1,5 +1,8 @@
 pub fn format_relative_time_with_now(seconds: i64, now: i64) -> String {
-    let diff = now - seconds;
+    // Saturating: a corrupt or hostile commit can carry an extreme timestamp
+    // (e.g. `i64::MIN`); `now - seconds` would otherwise overflow and panic in
+    // debug builds. Saturation degrades gracefully to a huge "…y ago" instead.
+    let diff = now.saturating_sub(seconds);
 
     if diff < 0 {
         return "just now".to_string();
@@ -32,5 +35,19 @@ mod tests {
         assert_eq!(format_relative_time_with_now(0, 2_591_999), "29d ago");
         assert_eq!(format_relative_time_with_now(0, 2_592_000), "1mo ago");
         assert_eq!(format_relative_time_with_now(0, 31_536_000), "1y ago");
+    }
+
+    #[test]
+    fn extreme_timestamps_do_not_overflow() {
+        // Hostile/corrupt commit times must not panic via i64 over/underflow.
+        assert_eq!(
+            format_relative_time_with_now(i64::MIN, 0),
+            format!("{}y ago", i64::MAX / 31_536_000)
+        );
+        // A far-future commit time saturates to "just now" rather than panicking.
+        assert_eq!(
+            format_relative_time_with_now(i64::MAX, i64::MIN),
+            "just now"
+        );
     }
 }

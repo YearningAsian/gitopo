@@ -15,7 +15,12 @@ path = "src/main.rs"
 [dependencies]
 ratatui = "0.30"
 crossterm = "0.29"
-git2 = { version = "0.21" }
+# default-features = false drops libgit2's optional ssh/https network
+# transports. This is a read-only, offline TUI: it must never reach the
+# network. git2 0.21's default feature set is already empty (no transports were
+# in the graph), so this is a zero-dependency-change lock that future-proofs the
+# no-network guarantee.
+git2 = { version = "0.21", default-features = false }
 anyhow = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 unicode-width = "0.2"

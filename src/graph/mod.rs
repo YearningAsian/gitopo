@@ -1,7 +1,7 @@
 mod render;
 mod types;
 
-pub use render::render_graph_prefix;
+pub use render::{classify_glyph, render_graph_prefix, GlyphKind};
 pub use types::{Connector, GraphRow};
 
 use crate::git::CommitInfo;
